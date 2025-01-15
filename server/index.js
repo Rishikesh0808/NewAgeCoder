@@ -42,7 +42,7 @@ const io = new Server(server, {
 
 const userSocketMap = {};
 const RoomStatus = new Map();
-
+const timelock=new Map();
 // Utility function to get all connected clients in a room
 const getAllConnectedClients = (roomId) => {
   return Array.from(io.sockets.adapter.rooms.get(roomId) || []).map(
@@ -116,15 +116,24 @@ io.on("connection", (socket) => {
   socket.on(ACTIONS.SYNC_CODE, ({ socketId, code }) => {
     io.to(socketId).emit(ACTIONS.CODE_CHANGE, { code });
   });
-  socket.on(ACTIONS.LOCK_ROOM, (roomId, callback) => {
-    // Set the current time as the lock timestamp for the room
-    timelock.set(roomId, Date.now());
+  socket.on("lock", (roomId, callback) => {
+  // Set the current time as the lock timestamp for the room
+  timelock.set(roomId, Date.now());
+
+  // Respond back to the client indicating that the room was locked successfully
   
-    // Respond back to the client indicating that the room was locked successfully
-    callback({ status: true, message: 'Room locked successfully' });
+
+  console.log(`Room ${roomId} locked at ${new Date().toISOString()}`);
+});
+socket.on("unlock", (roomId, callback) => {
+  // Set the current time as the lock timestamp for the room
+  timelock.delete(roomId);
+
+  // Respond back to the client indicating that the room was locked successfully
   
-    console.log(`Room ${roomId} locked at ${new Date().toISOString()}`);
-  });
+
+  console.log(`Room ${roomId} unlocked at ${new Date().toISOString()}`);
+});
 
   // Handle user disconnecting
   socket.on("disconnecting", () => {

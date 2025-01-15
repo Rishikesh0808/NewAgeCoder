@@ -3,12 +3,7 @@ import Client from "./Client";
 import Editor from "./Editor";
 import { initSocket } from "../Socket";
 import { ACTIONS } from "../Actions";
-import {
-  useNavigate,
-  useLocation,
-  Navigate,
-  useParams,
-} from "react-router-dom";
+import { useNavigate, useLocation, Navigate, useParams } from "react-router-dom";
 import { toast } from "react-hot-toast";
 import axios from "axios";
 
@@ -38,6 +33,7 @@ function EditorPage() {
   const [isCompileWindowOpen, setIsCompileWindowOpen] = useState(false);
   const [isCompiling, setIsCompiling] = useState(false);
   const [selectedLanguage, setSelectedLanguage] = useState("python3");
+  const [isRoomLocked, setIsRoomLocked] = useState(false); // Added state for lock status
   const codeRef = useRef(null);
 
   const Location = useLocation();
@@ -61,21 +57,19 @@ function EditorPage() {
       socketRef.current.emit(ACTIONS.JOIN, {
         roomId,
         username: Location.state?.username,
-      },(response)=>{
-        if(response.status){
+      }, (response) => {
+        if (response.status) {
           toast.error("Cannot let you join since room has been locked ");
-          toast.info("join after "+(response.time)/60+"minutes");
+          
         }
       });
 
       socketRef.current.on(
         ACTIONS.JOINED,
         ({ clients, username, socketId }) => {
-          
           if (username !== Location.state?.username) {
             toast.success(`${username} joined the room.`);
           }
-          
           setClients(clients);
           socketRef.current.emit(ACTIONS.SYNC_CODE, {
             code: codeRef.current,
@@ -90,6 +84,11 @@ function EditorPage() {
           return prev.filter((client) => client.socketId !== socketId);
         });
       });
+
+      // Listen for room lock status change
+      socketRef.current.on(ACTIONS.ROOM_LOCKED, (status) => {
+        setIsRoomLocked(status);
+      });
     };
     init();
 
@@ -97,6 +96,7 @@ function EditorPage() {
       socketRef.current && socketRef.current.disconnect();
       socketRef.current.off(ACTIONS.JOINED);
       socketRef.current.off(ACTIONS.DISCONNECTED);
+      socketRef.current.off(ACTIONS.ROOM_LOCKED);
     };
   }, []);
 
@@ -126,9 +126,9 @@ function EditorPage() {
         language: selectedLanguage,
       });
       console.log("Backend response:", response.data);
-      if(response.data.output){
-      setOutput(response.data.output || JSON.stringify(response.data));}
-      else{
+      if (response.data.output) {
+        setOutput(response.data.output || JSON.stringify(response.data));
+      } else {
         setOutput(" ");
       }
     } catch (error) {
@@ -141,6 +141,19 @@ function EditorPage() {
 
   const toggleCompileWindow = () => {
     setIsCompileWindowOpen(!isCompileWindowOpen);
+  };
+
+  // New function to toggle lock/unlock the room
+  const toggleRoomLock = () => {
+    if (isRoomLocked) {
+      socketRef.current.emit("unlock", roomId); // Emit unlock event
+      setIsRoomLocked(false);
+      toast.success("Room unlocked");
+    } else {
+      socketRef.current.emit("lock", roomId); // Emit lock event
+      setIsRoomLocked(true);
+      toast.success("Room locked");
+    }
   };
 
   return (
@@ -173,6 +186,14 @@ function EditorPage() {
             <button className="btn btn-danger w-100" onClick={leaveRoom}>
               Leave Room
             </button>
+
+            {/* Lock/Unlock button */}
+            <button
+              className={`btn w-100 mt-2 ${isRoomLocked ? "btn-warning" : "btn-primary"}`}
+              onClick={toggleRoomLock}
+            >
+              {isRoomLocked ? "Unlock Room" : "Lock Room"}
+            </button>
           </div>
         </div>
 
@@ -199,7 +220,7 @@ function EditorPage() {
             username={Location.state?.username}
             onCodeChange={(code) => {
               codeRef.current = code;
-            } }
+            }}
           />
         </div>
       </div>
